@@ -1,0 +1,4 @@
+build/
+*.o
+*.huf
+.DS_Store
