@@ -1,7 +1,8 @@
 # Huffman Compressor (C++17)
 
-A command-line **lossless file compressor** built on **canonical Huffman coding**.
-Compresses any file, decompresses to a byte-identical copy, and reports the ratio.
+A command-line lossless file compressor using canonical Huffman coding. It
+compresses any file, decompresses to a byte-identical copy, and prints the
+ratio.
 
 ```bash
 huffman compress   input.txt  input.huf
@@ -10,29 +11,33 @@ huffman decompress input.huf  output.txt
 
 ## How it works
 
-1. **Count** byte frequencies across the file.
-2. **Build a Huffman tree** (a min-heap merges the two rarest nodes repeatedly), and
-   read off each byte's **code length** from its depth — frequent bytes get short codes.
-3. **Assign canonical codes.** Instead of storing the whole tree, we store just the
-   256 code *lengths*; both sides derive the identical codes from them by a fixed rule.
-   That keeps the header tiny (256 bytes) and decoding simple.
-4. **Bit-pack** the codes MSB-first via a [`BitWriter`](include/huffman/BitIO.h);
-   the decoder walks bits through the canonical tables to recover each byte.
+Count byte frequencies over the file. Build a Huffman tree by repeatedly merging
+the two rarest nodes out of a min-heap, then read each byte's code length off its
+depth, so frequent bytes end up with short codes.
+
+Then assign canonical codes. Rather than storing the tree, I store just the 256
+code lengths and both sides derive identical codes from them by a fixed rule.
+The header stays 256 bytes and the decoder stays simple.
+
+Finally bit-pack the codes MSB-first through a
+[`BitWriter`](include/huffman/BitIO.h). The decoder walks bits through the
+canonical tables to recover each byte.
 
 ### File format
 
 ```
 "HUF1"            4 bytes   magic
-originalLength    8 bytes   big-endian (lets us stop exactly, ignoring bit padding)
-codeLengths[256]  256 bytes one length per possible byte value (0 = unused)
+originalLength    8 bytes   big-endian (so we stop exactly and ignore bit padding)
+codeLengths[256]  256 bytes one length per byte value (0 = unused)
 bitstream         ...       the packed codes
 ```
 
-## Why canonical Huffman
+## Why canonical
 
-A classic Huffman implementation must serialise the tree; canonical Huffman stores
-only the code lengths and reconstructs the codes deterministically. Smaller header,
-simpler decoder, and a natural table-driven decode — the same idea DEFLATE/ZIP use.
+A textbook Huffman implementation has to serialise the tree into the file.
+Canonical Huffman stores only the code lengths and rebuilds the codes
+deterministically, which gives you a smaller header, a simpler decoder, and a
+natural table-driven decode. It's what DEFLATE and ZIP do.
 
 ## Results
 
@@ -44,9 +49,9 @@ compressed :  6,659 bytes   (1.57x, 36.1% saved)
 round-trip : byte-identical
 ```
 
-Ratios depend on entropy: low-entropy data (logs, text, skewed distributions)
-compresses well; already-random/compressed data barely moves — as information
-theory says it must.
+The ratio tracks entropy. Text, logs and anything with a skewed byte
+distribution compress well; already-compressed or random data barely moves,
+which is what information theory says has to happen.
 
 ## Build & run
 
@@ -56,12 +61,12 @@ cmake --build build
 
 ./build/huffman compress   README.md out.huf
 ./build/huffman decompress out.huf   back.md
-ctest --test-dir build     # 8 tests: round-trip (empty/single/random/all-bytes) + bit I/O
+ctest --test-dir build     # 8 tests
 ```
 
-Requires CMake ≥ 3.14 and a C++17 compiler. GoogleTest is fetched automatically.
+Needs CMake 3.14+ and a C++17 compiler. GoogleTest is fetched automatically.
 
-## Project layout
+## Layout
 
 ```
 include/huffman/   BitIO.h (bit-level read/write), Huffman.h (public API)
@@ -69,14 +74,15 @@ src/               Huffman.cpp (codec + tree + file format), main.cpp (CLI)
 tests/             test_huffman.cpp   (GoogleTest)
 ```
 
-## Edge cases handled
+## Edge cases
 
-- Empty file, single byte, a file of one repeated symbol (forced 1-bit code)
+- Empty file, single byte, and a file of one repeated symbol (which needs a
+  forced 1-bit code, otherwise the tree has no depth to read lengths off)
 - All 256 byte values present
-- Truncated / non-`HUF1` input is rejected rather than crashing
+- Truncated or non-`HUF1` input gets rejected instead of crashing
 
 ## Roadmap
 
-- [ ] Run-length + Huffman (a DEFLATE-lite) for a better ratio
-- [ ] Streaming API for files larger than memory
+- [ ] Run-length plus Huffman, roughly a DEFLATE-lite, for a better ratio
+- [ ] Streaming API for files bigger than memory
 - [ ] Adaptive Huffman (single pass, no header)
